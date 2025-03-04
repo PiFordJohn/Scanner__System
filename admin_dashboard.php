@@ -82,33 +82,33 @@ $locked_users = $conn->query("SELECT id, username, email FROM users WHERE accoun
     </div>
 
     <!-- Locked Accounts Section -->
-    <h2 class="text-center mt-5">Locked User Accounts</h2>
-    <div class="card shadow p-4 mt-3">
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped">
-                <thead class="table-danger">
-                    <tr>
-                        <th>Username</th>
-                        <th>Email</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                  <?php while ($user = $locked_users->fetch_assoc()): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($user["username"]); ?></td>
-                        <td><?php echo htmlspecialchars($user["email"]); ?></td>
-                        <td>
-                            <a href="unlock_user.php?id=<?php echo htmlspecialchars($user['id']); ?>" class="btn btn-success btn-sm">Unlock</a>
-                        </td>
-                    </tr>
-                  <?php endwhile; ?>
-                </tbody>
-            </table>
-        </div>
+<h2 class="text-center mt-5">Locked User Accounts</h2>
+<div class="card shadow p-4 mt-3">
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-danger">
+                <tr>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+              <?php while ($user = $locked_users->fetch_assoc()): ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($user["username"]); ?></td>
+                    <td><?php echo htmlspecialchars($user["email"]); ?></td>
+                    <td>
+                        <a href="unlock_user.php?id=<?php echo htmlspecialchars($user['id']); ?>" class="btn btn-success btn-sm">Unlock</a>
+                        <a href="delete_user.php?id=<?php echo htmlspecialchars($user['id']); ?>" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this account?');">Delete</a>
+                    </td>
+                </tr>
+              <?php endwhile; ?>
+            </tbody>
+        </table>
     </div>
-
 </div>
+
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
