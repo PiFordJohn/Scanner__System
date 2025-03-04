@@ -1,40 +1,67 @@
 <?php
 session_start();
-include "config.php"; // Ensure database connection
+include "config.php"; 
 
 $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $login_input = trim($_POST["login_input"]); // Can be username or email
+    $login_input = trim($_POST["login_input"]); 
     $password = trim($_POST["password"]);
 
     if (!empty($login_input) && !empty($password)) {
-        // Prepare SQL to check both username and email
-        $stmt = $conn->prepare("SELECT id, username, email, password, role FROM users WHERE username = ? OR email = ?");
+        
+        // Check if the user exists
+        $stmt = $conn->prepare("SELECT id, username, email, password, failed_attempts, last_attempt_time, account_locked FROM users WHERE username = ? OR email = ?");
         $stmt->bind_param("ss", $login_input, $login_input);
         $stmt->execute();
         $result = $stmt->get_result();
         
         if ($result->num_rows == 1) {
             $user = $result->fetch_assoc();
+            $user_id = $user["id"];
+            $failed_attempts = $user["failed_attempts"];
+            $last_attempt_time = $user["last_attempt_time"];
+            $account_locked = $user["account_locked"];
 
-            // Verify password
-            if (password_verify($password, $user["password"])) {
-                // Set session variables
-                $_SESSION["user_id"] = $user["id"];
-                $_SESSION["username"] = $user["username"];
-                $_SESSION["email"] = $user["email"];
-                $_SESSION["role"] = $user["role"];
-
-                // Redirect based on role
-                if ($user["role"] == "admin") {
-                    header("Location: admin_dashboard.php");
-                } else {
-                    header("Location: user_dashboard.php");
-                }
-                exit;
+            // Check if the account is locked
+            if ($account_locked == 1) {
+                $error = "Your account is locked due to multiple failed login attempts. Please contact admin.";
             } else {
-                $error = "Invalid password.";
+                // Verify password
+                if (password_verify($password, $user["password"])) {
+                    // Reset failed attempts on successful login
+                    $reset_stmt = $conn->prepare("UPDATE users SET failed_attempts = 0, last_attempt_time = NULL WHERE id = ?");
+                    $reset_stmt->bind_param("i", $user_id);
+                    $reset_stmt->execute();
+                    $reset_stmt->close();
+
+                    // Set session variables
+                    $_SESSION["user_id"] = $user["id"];
+                    $_SESSION["username"] = $user["username"];
+                    $_SESSION["email"] = $user["email"];
+
+                    // Redirect to dashboard
+                    header("Location: dashboard.php");
+                    exit;
+                } else {
+                    // Increment failed attempts
+                    $failed_attempts++;
+                    $update_stmt = $conn->prepare("UPDATE users SET failed_attempts = ?, last_attempt_time = NOW() WHERE id = ?");
+                    $update_stmt->bind_param("ii", $failed_attempts, $user_id);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+
+                    // Lock account if failed attempts reach 3
+                    if ($failed_attempts >= 3) {
+                        $lock_stmt = $conn->prepare("UPDATE users SET account_locked = 1 WHERE id = ?");
+                        $lock_stmt->bind_param("i", $user_id);
+                        $lock_stmt->execute();
+                        $lock_stmt->close();
+                        $error = "Your account has been locked due to multiple failed login attempts. Please contact admin.";
+                    } else {
+                        $error = "Invalid password. Attempts remaining: " . (3 - $failed_attempts);
+                    }
+                }
             }
         } else {
             $error = "User not found.";
