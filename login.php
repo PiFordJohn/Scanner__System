@@ -6,25 +6,40 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST["email"]);
     $password = trim($_POST["password"]);
 
-    $stmt = $conn->prepare("SELECT id, username, password FROM users WHERE email = ?");
+    // Fetch user data including failed attempts and lock status
+    $stmt = $conn->prepare("SELECT id, username, password, failed_attempts, account_locked FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $stmt->store_result();
 
     if ($stmt->num_rows > 0) {
-        $stmt->bind_result($id, $username, $hashed_password);
+        $stmt->bind_result($id, $username, $hashed_password, $failed_attempts, $account_locked);
         $stmt->fetch();
 
-        if (password_verify($password, $hashed_password)) {
+        if ($account_locked) {
+            $error = "❌ Your account is locked due to multiple failed login attempts. Contact the admin.";
+        } elseif (password_verify($password, $hashed_password)) {
+            // Reset failed attempts on successful login
+            $conn->query("UPDATE users SET failed_attempts = 0 WHERE id = $id");
             $_SESSION["user_id"] = $id;
             $_SESSION["username"] = $username;
             header("Location: dashboard.php");
             exit;
         } else {
-            $error = "Invalid password!";
+            // Increment failed attempts
+            $failed_attempts++;
+            if ($failed_attempts >= 3) {
+                // Lock account if 3 failed attempts
+                $conn->query("UPDATE users SET account_locked = 1 WHERE id = $id");
+                $error = "❌ Too many failed attempts! Your account has been locked.";
+            } else {
+                // Update failed attempts count
+                $conn->query("UPDATE users SET failed_attempts = $failed_attempts WHERE id = $id");
+                $error = "❌ Invalid password! Attempt $failed_attempts/3";
+            }
         }
     } else {
-        $error = "User not found!";
+        $error = "❌ User not found!";
     }
 }
 ?>
@@ -46,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <h2 class="text-center">Login</h2>
 
                 <?php if (isset($error)): ?>
-                    <div class="alert alert-danger"><?php echo $error; ?></div>
+                    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
                 <?php endif; ?>
 
                 <form method="post">
@@ -62,6 +77,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </form>
 
                 <p class="mt-3 text-center">Don't have an account? <a href="register.php">Register</a></p>
+                <p class="text-center"><a href="forgot_password.php">Forgot Password?</a></p>
             </div>
         </div>
     </div>
