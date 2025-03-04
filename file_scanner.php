@@ -14,11 +14,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES["file"])) {
     $allowedTypes = ["txt", "log", "json"];
 
     if (!in_array($filetype, $allowedTypes)) {
-        $result = "File type not allowed!";
-        $alertClass = "alert-danger";
+        $_SESSION["message"] = "File type not allowed!";
+        $_SESSION["alertClass"] = "alert-danger";
     } else {
         $content = file_get_contents($_FILES["file"]["tmp_name"]);
-        $blacklist = ["malware", "virus", "attack", "hacker"];
+        
+        // Extended blacklist for more detection
+        $blacklist = ["malware", "virus", "attack", "hacker", "trojan", "ransomware", "phishing", "exploit"];
         $detected = [];
 
         foreach ($blacklist as $word) {
@@ -28,18 +30,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES["file"])) {
         }
 
         if (empty($detected)) {
-            $result = "File is clean.";
-            $alertClass = "alert-success";
+            $_SESSION["message"] = "✅ File is clean.";
+            $_SESSION["alertClass"] = "alert-success";
         } else {
-            $result = "Malicious content detected: " . implode(", ", $detected);
-            $alertClass = "alert-danger";
+            $_SESSION["message"] = "⚠ Malicious content detected: " . implode(", ", $detected);
+            $_SESSION["alertClass"] = "alert-danger";
+
+            // JavaScript alert for instant feedback
+            echo "<script>alert('⚠ Warning: Malicious file detected!');</script>";
         }
 
-        // Store in database
+        // Store scan result in database
         $stmt = $conn->prepare("INSERT INTO scan_logs (user_id, scan_type, scanned_content) VALUES (?, 'file', ?)");
-        $stmt->bind_param("is", $user_id, $result);
+        $stmt->bind_param("is", $user_id, $_SESSION["message"]);
         $stmt->execute();
     }
+
+    header("Location: file_scanner.php"); // Refresh page with the message
+    exit;
 }
 ?>
 
@@ -73,8 +81,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES["file"])) {
                 <h2 class="text-center">File Scanner</h2>
                 <p class="text-muted text-center">Upload a file (.txt, .log, .json) for scanning.</p>
 
-                <?php if (isset($result)): ?>
-                    <div class="alert <?php echo $alertClass; ?>"><?php echo $result; ?></div>
+                <?php if (isset($_SESSION["message"])): ?>
+                    <div class="alert <?php echo $_SESSION["alertClass"]; ?>">
+                        <?php 
+                            echo $_SESSION["message"]; 
+                            unset($_SESSION["message"]); 
+                            unset($_SESSION["alertClass"]); 
+                        ?>
+                    </div>
                 <?php endif; ?>
 
                 <form method="post" enctype="multipart/form-data">
