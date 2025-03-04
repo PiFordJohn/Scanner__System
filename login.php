@@ -1,47 +1,51 @@
 <?php
 session_start();
-include "config.php"; // Database connection file
+include "config.php"; // Ensure database connection
+
+$error = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $email = trim($_POST["email"]);
+    $login_input = trim($_POST["login_input"]); // Can be username or email
     $password = trim($_POST["password"]);
 
-    // Fetch user data including failed attempts and lock status
-    $stmt = $conn->prepare("SELECT id, username, password, failed_attempts, account_locked FROM users WHERE email = ?");
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $stmt->store_result();
+    if (!empty($login_input) && !empty($password)) {
+        // Prepare SQL to check both username and email
+        $stmt = $conn->prepare("SELECT id, username, email, password, role FROM users WHERE username = ? OR email = ?");
+        $stmt->bind_param("ss", $login_input, $login_input);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows == 1) {
+            $user = $result->fetch_assoc();
 
-    if ($stmt->num_rows > 0) {
-        $stmt->bind_result($id, $username, $hashed_password, $failed_attempts, $account_locked);
-        $stmt->fetch();
+            // Verify password
+            if (password_verify($password, $user["password"])) {
+                // Set session variables
+                $_SESSION["user_id"] = $user["id"];
+                $_SESSION["username"] = $user["username"];
+                $_SESSION["email"] = $user["email"];
+                $_SESSION["role"] = $user["role"];
 
-        if ($account_locked) {
-            $error = "❌ Your account is locked due to multiple failed login attempts. Contact the admin.";
-        } elseif (password_verify($password, $hashed_password)) {
-            // Reset failed attempts on successful login
-            $conn->query("UPDATE users SET failed_attempts = 0 WHERE id = $id");
-            $_SESSION["user_id"] = $id;
-            $_SESSION["username"] = $username;
-            header("Location: dashboard.php");
-            exit;
-        } else {
-            // Increment failed attempts
-            $failed_attempts++;
-            if ($failed_attempts >= 3) {
-                // Lock account if 3 failed attempts
-                $conn->query("UPDATE users SET account_locked = 1 WHERE id = $id");
-                $error = "❌ Too many failed attempts! Your account has been locked.";
+                // Redirect based on role
+                if ($user["role"] == "admin") {
+                    header("Location: admin_dashboard.php");
+                } else {
+                    header("Location: user_dashboard.php");
+                }
+                exit;
             } else {
-                // Update failed attempts count
-                $conn->query("UPDATE users SET failed_attempts = $failed_attempts WHERE id = $id");
-                $error = "❌ Invalid password! Attempt $failed_attempts/3";
+                $error = "Invalid password.";
             }
+        } else {
+            $error = "User not found.";
         }
+        $stmt->close();
     } else {
-        $error = "❌ User not found!";
+        $error = "Please enter your username or email and password.";
     }
 }
+
+$conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -54,31 +58,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 </head>
 <body class="bg-light">
 
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-5">
-            <div class="card shadow p-4">
-                <h2 class="text-center">Login</h2>
+<div class="container d-flex justify-content-center align-items-center" style="height: 100vh;">
+    <div class="card p-4 shadow" style="width: 400px;">
+        <h3 class="text-center">Login</h3>
+        
+        <?php if (!empty($error)): ?>
+            <div class="alert alert-danger"><?php echo $error; ?></div>
+        <?php endif; ?>
 
-                <?php if (isset($error)): ?>
-                    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
-                <?php endif; ?>
-
-                <form method="post">
-                    <div class="mb-3">
-                        <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" placeholder="Enter your email" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control" placeholder="Enter your password" required>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100">Login</button>
-                </form>
-
-                <p class="mt-3 text-center">Don't have an account? <a href="register.php">Register</a></p>
-                <p class="text-center"><a href="forgot_password.php">Forgot Password?</a></p>
+        <form method="POST">
+            <div class="mb-3">
+                <label for="login_input" class="form-label">Username or Email</label>
+                <input type="text" class="form-control" id="login_input" name="login_input" required>
             </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <a href="register.php">Create an account</a> | 
+            <a href="forgot_password.php">Forgot password?</a>
+        </div>
+
+        <!-- Back to Home Button -->
+        <div class="text-center mt-3">
+            <a href="index.php" class="btn btn-secondary w-100">Back to Home</a>
         </div>
     </div>
 </div>
